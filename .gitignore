@@ -1,0 +1,5 @@
+/.venv/
+/poetry.lock
+/summary.csv
+/config.yaml
+/.idea
