@@ -1,6 +1,7 @@
 import os
-import yaml
 import csv
+import re
+from utils import load_config
 
 try:
     import pyperclip
@@ -10,35 +11,6 @@ except ImportError:
     CLIPBOARD_AVAILABLE = False
 
 
-def load_config(config_path="config.yaml"):
-    if not os.path.exists(config_path):
-        print(f"⚠️ Config file not found: {config_path}")
-        print("🔧 Creating a blank config.yaml file...")
-
-        default_yaml = """# Example config.yaml
-root_paths:
-  - parent path of language directory
-
-
-valid_langs:
-  - EN
-  - CN
-  - RU
-
-valid_types:
-  - PDF
-  - MP4
-"""
-        with open(config_path, "w", encoding="utf-8") as f:
-            f.write(default_yaml)
-
-        print("✅ Created config.yaml. Please edit it and re-run the script.")
-        exit(1)
-
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 def scan_folder_single(root_path, valid_langs, valid_types):
     summary = {}
 
@@ -46,6 +18,8 @@ def scan_folder_single(root_path, valid_langs, valid_types):
         print(f"⚠️ Invalid path: {root_path}")
         return summary
 
+    pattern = re.compile(r"_(?:[2-9]|1[0-9]|20)\.pdf$", re.IGNORECASE)
+    remove_count = 0
     for lang in valid_langs:
         lang_dir = os.path.join(root_path, lang)
         if not os.path.isdir(lang_dir):
@@ -62,11 +36,29 @@ def scan_folder_single(root_path, valid_langs, valid_types):
 
             for root, _, files in os.walk(category_dir):
                 for f in files:
+                    file_path = os.path.join(root, f)
+
+                    # Only process PDF files
+                    if not f.lower().endswith(".pdf"):
+                        continue
+
+                    # Remove files like *_2.pdf, *_3.pdf, ..., *_xx.pdf
+                    if pattern.search(f):
+                        try:
+                            os.remove(file_path)
+                            ++remove_count
+                            print(f"🗑️ Removed file: {file_path}")
+                        except Exception as e:
+                            print(f"⚠️ Failed to remove: {file_path} - {str(e)}")
+                        continue
+
                     try:
-                        file_path = os.path.join(root, f)
                         if os.path.isfile(file_path):
                             total_size += os.path.getsize(file_path)
                             file_count += 1
+                            # if extract_korean_from_pdf(file_path):
+                            #     korean_pdf_paths.append(file_path)
+                            #     print(file_path)
                     except Exception as e:
                         print(f"⚠️ Skipped file: {file_path} - {str(e)}")
 
@@ -75,7 +67,7 @@ def scan_folder_single(root_path, valid_langs, valid_types):
                     'count': file_count,
                     'size': round(total_size / (1024 ** 3), 2)  # in GB
                 }
-
+    print("removed count", remove_count)
     return summary
 
 
