@@ -1,7 +1,7 @@
 import os
 import springernature_api_client.openaccess as openaccess
 import csv
-from utils import load_config
+from src.utils.utils import load_config
 
 config = load_config()
 API_KEY = config['springer_openaccess']['API_KEY'][0]
@@ -42,7 +42,7 @@ def fetch_until_cutoff():
             # parse year and enforce cutoff
             year = int(pub_date.split("-")[0])
             if year < CUT_OFF_YEAR:
-                # stop everything as soon as we hit after-2023
+                print("date limit:", CUT_OFF_YEAR)
                 return rows
 
             volume = r.get("volume", "")

@@ -1,0 +1,6 @@
+springernature-api-client # springer api
+XlsxWriter
+pyyaml
+requests
+PyPDF2
+pdfplumber

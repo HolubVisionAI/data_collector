@@ -1,7 +1,7 @@
 import os
 import csv
 import re
-from utils import load_config
+from src.utils.utils import load_config
 
 try:
     import pyperclip

@@ -1,8 +1,18 @@
 import os
 import yaml
+from pathlib import Path
+
+# Get the directory of this script: src/utils
+current_file = Path(__file__).resolve()
+
+# Go up two levels to reach project root
+project_root = current_file.parents[2]
+
+# Create a new file in the root
+output_file = project_root / "config.yaml"
 
 
-def load_config(config_path="config.yaml"):
+def load_config(config_path=output_file):
     if not os.path.exists(config_path):
         print(f"⚠️ Config file not found: {config_path}")
         print("🔧 Creating a blank config.yaml file...")
