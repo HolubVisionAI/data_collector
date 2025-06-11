@@ -75,7 +75,7 @@ with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as csvf:
         "Keywords", "Date", "Authors", "Article URL",
         "PDF URL", "FileName"
     ])
-
+    wait = WebDriverWait(driver, 15)
     # Iterate listing pages
     for listing_url in ROOT_URLS:
         driver.get(listing_url)
@@ -87,8 +87,10 @@ with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as csvf:
         links = driver.find_elements(By.CSS_SELECTOR, "div.searchlist-title a")
         article_urls = [a.get_attribute("href") for a in links]
 
-        for article_url in article_urls:
-            driver.get(article_url)
+        # for article_url in article_urls:
+        article_url = article_urls[0]
+        driver.get(article_url)
+        while True:
             WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, 'meta[name="citation_doi"]'))
             )
@@ -143,6 +145,11 @@ with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as csvf:
                 keywords, date, authors, article_url,
                 pdf_url, filename
             ])
+            try:
+                next_article_btn = driver.find_element(By.CSS_SELECTOR, "a.previous-icon.colorscheme09-lighter")
+                next_article_btn.click()
+            except:
+                break
 
 driver.quit()
 print(f"Done! Output CSV: {OUTPUT_CSV}, PDFs in '{PDF_DIR}/'")

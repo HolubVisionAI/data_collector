@@ -21,6 +21,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
+
+from src.pre_process.utils import sanitize_filename
 from src.utils.utils import load_config
 
 # ── CONFIG ────────────────────────────────────────────────────────────────
@@ -74,7 +76,8 @@ stealth(driver,
 # ── CSV SETUP ─────────────────────────────────────────────────────────────────
 csvf = open(OUTPUT_CSV, "w", newline="", encoding="utf-8")
 writer = csv.writer(csvf)
-writer.writerow(["Volume", "Issue", "Title", "DOI", "Abstract", "Keywords", "Date", "Authors", "URL", "PDF URL"])
+writer.writerow(
+    ["Volume", "Issue", "Title", "DOI", "Abstract", "Keywords", "Date", "Authors", "URL", "PDF URL", "FileName"])
 
 # ── MAIN LOOP ─────────────────────────────────────────────────────────────────
 current_url = START_URL
@@ -140,20 +143,24 @@ while True:
         except:
             pass
 
-        keywords_raw = get_meta_content("keywords")
-        keywords = [kw.strip() for kw in keywords_raw.split(",")] if keywords_raw else []
+        keywords = get_meta_content("keywords")
+        # keywords = [kw.strip() for kw in keywords_raw.split(",")] if keywords_raw else []
+        # keywords = keywords.
         # Authors
         authors = []
         for auth in driver.find_elements(By.CSS_SELECTOR, "div.contributors [property='author']"):
             try:
                 gn = auth.find_element(By.CSS_SELECTOR, "[property='givenName']").text
                 fn = auth.find_element(By.CSS_SELECTOR, "[property='familyName']").text
+                if not gn or not fn:
+                    continue
                 authors.append(f"{gn} {fn}")
             except:
                 continue
         authors_str = ", ".join(authors)
 
         pdf_url = ""
+        filename = ""
         # download PDF if available
         try:
             if not restricted:
@@ -166,14 +173,40 @@ while True:
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "a#favourite-download.download")))
 
                 time.sleep(5)
+                existing_files = set(f for f in os.listdir(PDF_DIR) if f.lower().endswith(".pdf"))
                 pdf_button.click()
-                time.sleep(15)
+
                 print("✔ Clicked the PDF download button")
+                # Wait for new PDF to appear
+                new_file = None
+                for _ in range(60):
+                    time.sleep(1)
+                    current_files = set(f for f in os.listdir(PDF_DIR) if f.lower().endswith(".pdf"))
+                    added = current_files - existing_files
+                    if added:
+                        candidate = added.pop()
+                        if candidate.endswith(".crdownload"):
+                            continue
+                        new_file = candidate
+                        break
+
+                if new_file:
+                    filename = sanitize_filename()
+                    src_path = os.path.join(PDF_DIR, new_file)
+                    dst_path = os.path.join(PDF_DIR, filename)
+                    try:
+                        os.rename(src_path, dst_path)
+                    except:
+                        filename = new_file
+                else:
+                    filename = ""
+                    pdf_url = ""
 
         except:
             pass
         # write CSV row
-        writer.writerow([volume, issue, title, doi, abstract, keywords, date, authors_str, article_url, pdf_url])
+        writer.writerow(
+            [volume, issue, title, doi, abstract, keywords, date, authors_str, article_url, pdf_url, filename])
         csvf.flush()
         # close detail tab
         driver.close()
@@ -184,7 +217,7 @@ while True:
     prev = driver.find_elements(By.CSS_SELECTOR, "a[data-id='toc-previous-issue']")
     if not prev:
         break
-    href = prev[0].get_attribute("href")
+    current_url = prev[0].get_attribute("href")
     time.sleep(1)
 
 # ── CLEANUP ────────────────────────────────────────────────────────────────────
