@@ -9,8 +9,8 @@ from src.utils.utils import load_config
 
 # ── CONFIG ────────────────────────────────────────────────────────────────
 cfg = load_config()["urls2csv"]
-INPUT_DIR = cfg["INPUT_DIR"][0]       # e.g. "/path/to/input"
-OUTPUT_DIR = cfg["OUTPUT_DIR"][0]     # e.g. "/path/to/output"
+INPUT_DIR = cfg["INPUT_DIR"][0]  # e.g. "/path/to/input"
+OUTPUT_DIR = cfg["OUTPUT_DIR"][0]  # e.g. "/path/to/output"
 URL_FILE_PATTERN = cfg["URL_FILE_PATTERN"][0]  # e.g. "_file_type_pdf_"
 
 # ── SET UP LOGGING ─────────────────────────────────────────────────────────
@@ -86,8 +86,12 @@ def process_group(prefix: str, file_list: list[str], output_dir: str):
     after_dedup = combined.shape[0]
     logger.info(f"    • Total URLs before dedup: {before_dedup}, after dedup: {after_dedup}")
 
-    # Extract file name (text after the last '/')
-    combined["File Name"] = combined["URL"].apply(lambda u: os.path.basename(u))
+    # Extract file name (text after the last '/'), except for YouTube links
+    def extract_filename(u: str) -> str:
+        # If the URL points to YouTube (e.g., contains 'www.youtube'), omit the file name
+        return '' if 'www.youtube' in u else os.path.basename(u)
+
+    combined['File Name'] = combined['URL'].apply(extract_filename)
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
