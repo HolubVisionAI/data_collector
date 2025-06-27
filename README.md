@@ -1,7 +1,7 @@
-
 # Data Collector
 
-A modular, extensible Python framework for automating data-collection workflows: journal metadata crawling, PDF/video downloading, data export and folder scanning.
+A modular, extensible Python framework for automating data-collection workflows: journal metadata crawling, PDF/video
+downloading, data export and folder scanning.
 
 ---
 
@@ -12,24 +12,24 @@ A modular, extensible Python framework for automating data-collection workflows:
   • J-Stage  
   • Wiley Online Library  
   • AAMI Array  
-  • Springer Journals  
+  • Springer Journals
 - **Data Export**  
   • Parse metadata (title, authors, date, URL) into CSV  
-  • Generate aggregate Excel reports  
+  • Generate aggregate Excel reports
 - **Media Download**  
   • Bulk PDF download via `aria2`  
-  • Video download via `yt-dlp`  
+  • Video download via `yt-dlp`
 - **Utilities**  
   • Convert URL lists to CSV  
-  • Scan folders for file counts & sizes  
+  • Scan folders for file counts & sizes
 - **Scheduling**  
-  • Integrate with Windows Task Scheduler or cron  
+  • Integrate with Windows Task Scheduler or cron
 
 ---
 
 ## 📦 Installation
 
-1. **Clone the repo**  
+1. **Clone the repo**
    ```bash
    git clone https://github.com/HolubVisionAI/data_collector.git
    cd data_collector
@@ -38,9 +38,7 @@ A modular, extensible Python framework for automating data-collection workflows:
 2. **Install dependencies**
 
    ```bash
-   # Using Poetry (recommended)
-   poetry install
-
+   
    # or, with pip
    pip install -r requirements.txt
    ```
@@ -123,13 +121,13 @@ scan_folder
 Run any task like so:
 
 ```bash
-poetry run python -m src.<module> --config config.yaml
+ python -m src.<module> --config config.yaml
 ```
 
 > Example: run SagePub crawl
 >
 > ```bash
-> poetry run python -m src.sagepub_crawling --config config.yaml
+> python -m src.sagepub_crawling --config config.yaml
 > ```
 
 ---
@@ -155,3 +153,6 @@ poetry run python -m src.<module> --config config.yaml
 
 ---
 
+## License
+
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
