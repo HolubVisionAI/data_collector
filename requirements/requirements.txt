@@ -4,3 +4,11 @@ pyyaml
 requests
 PyPDF2
 pdfplumber
+pandas ~=1.5.3
+yt-dlp # for downloading youtube
+# crowling by browser
+undetected-chromedriver>=3.1.5
+selenium>=4.0.0
+requests>=2.0
+webdriver-manager>=3.8
+selenium-stealth~=1.0

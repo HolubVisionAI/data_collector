@@ -2,14 +2,13 @@ import os
 import glob
 import subprocess
 import logging
-import argparse
 
 import pandas as pd
 from src.utils.utils import load_config
 
 # ── CONFIG ────────────────────────────────────────────────────────────────
 cfg = load_config()["aria2_download"]
-INPUT_DIR = cfg["INPUT_DIR"][0]       # e.g. "/path/to/input"
+INPUT_DIR = cfg["INPUT_DIR"][0]  # e.g. "/path/to/input"
 OUTPUT_DIR = cfg["OUTPUT_DIR"][0]
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
              "(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
@@ -125,7 +124,6 @@ def main(input_dir: str, output_dir: str):
 
 
 if __name__ == "__main__":
-
     logger.info("Starting bulk download process")
     logger.info(f"Input directory: '{INPUT_DIR}'")
     logger.info(f"Output directory: '{OUTPUT_DIR}'")

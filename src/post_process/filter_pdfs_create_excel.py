@@ -68,9 +68,9 @@ def link_csv_to_files(
 if __name__ == "__main__":
     config = load_config()
 
-    CSV_PATH = config["excel_creator"]["CSV_PATH"][0]
     ROOT_DIR = config["excel_creator"]["ROOT_DIR"][0]
-    OUTPUT_XLSX = config["excel_creator"]["OUTPUT_XLSX"][0]
+    CSV_PATH = ROOT_DIR + config["excel_creator"]["CSV_PATH"][0]
+    OUTPUT_XLSX = ROOT_DIR + config["excel_creator"]["OUTPUT_XLSX"][0]
     SRC_COLUMN = config["excel_creator"]["SRC_COLUMN"][0]
     MATCH_CUTOFF = config["excel_creator"]["MATCH_CUTOFF"][0]
 
