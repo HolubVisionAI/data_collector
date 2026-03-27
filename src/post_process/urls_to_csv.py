@@ -102,45 +102,83 @@ def process_group(prefix: str, file_list: list[str], output_dir: str):
     logger.info(f"    ⇒ Wrote {after_dedup} unique URLs to '{os.path.basename(out_path)}'")
 
 
-def main(input_dir: str, output_dir: str):
+def process_directory(dir_path: str):
     """
-    1) Find all files in input_dir whose names contain URL_FILE_PATTERN.
-    2) Group by prefix (everything before URL_FILE_PATTERN).
-    3) For each group, call process_group().
+    Process a single directory: find all files matching URL_FILE_PATTERN,
+    group by prefix, and write merged CSV in the same directory.
     """
     # Pattern: any filename containing URL_FILE_PATTERN (regardless of extension)
-    pattern = os.path.join(input_dir, f"*{URL_FILE_PATTERN}*")
+    pattern = os.path.join(dir_path, f"*{URL_FILE_PATTERN}*")
     all_files = glob.glob(pattern)
 
     if not all_files:
-        logger.warning(f"No files matching '*{URL_FILE_PATTERN}*' found in '{input_dir}'.")
+        logger.debug(f"No files matching '*{URL_FILE_PATTERN}*' found in '{dir_path}'.")
         return
 
-    logger.info(f"Found {len(all_files)} file(s) in '{input_dir}'.")
+    logger.info(f"\n📁 Processing directory: '{dir_path}'")
+    logger.info(f"   Found {len(all_files)} file(s).")
     groups: dict[str, list[str]] = {}
 
     # Group by prefix (the part before URL_FILE_PATTERN)
     for full_path in all_files:
         base = os.path.basename(full_path)
         if URL_FILE_PATTERN not in base:
-            logger.debug(f"Skipping '{base}' (does not match pattern).")
+            logger.debug(f"   Skipping '{base}' (does not match pattern).")
             continue
         prefix = base.split(URL_FILE_PATTERN, 1)[0]
         groups.setdefault(prefix, []).append(full_path)
 
-    logger.info(f"Detected {len(groups)} group(s): {', '.join(groups.keys())}")
+    if not groups:
+        logger.debug(f"   No valid groups found in '{dir_path}'.")
+        return
 
-    # Process each group
+    logger.info(f"   Detected {len(groups)} group(s): {', '.join(groups.keys())}")
+
+    # Process each group, outputting to the same directory
     for prefix, files in groups.items():
-        process_group(prefix, files, output_dir)
+        process_group(prefix, files, dir_path)
+
+
+def main(input_dir: str, output_dir: str):
+    """
+    Walk through input_dir and all subdirectories recursively.
+    For each directory containing files matching URL_FILE_PATTERN,
+    process them and write merged CSV in the same directory.
+    
+    Note: output_dir parameter is kept for backward compatibility but
+    is not used - each directory outputs to itself.
+    """
+    if not os.path.isdir(input_dir):
+        logger.error(f"Input directory does not exist: '{input_dir}'")
+        return
+
+    logger.info(f"Walking directory tree starting from: '{input_dir}'")
+    if output_dir != input_dir:
+        logger.info(f"Note: Output directory parameter ignored. CSV files will be written in each subfolder.")
+    
+    processed_count = 0
+    
+    # Walk through all subdirectories
+    for root, dirs, files in os.walk(input_dir):
+        # Check if there are any matching files in this directory
+        matching_files = [f for f in files if URL_FILE_PATTERN in f]
+        if matching_files:
+            process_directory(root)
+            processed_count += 1
+    
+    if processed_count == 0:
+        logger.warning(f"No directories with matching files found in '{input_dir}'.")
+    else:
+        logger.info(f"\n✅ Processed {processed_count} directory(ies).")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
-            "Scan a directory for files whose names contain URL_FILE_PATTERN, "
-            "parse percent-encoded URLs in each file, drop duplicates, "
-            "extract file names, and write one '<prefix>_merged.csv' per group."
+            "Recursively walk through input_dir and all subdirectories. "
+            "For each directory containing files whose names contain URL_FILE_PATTERN, "
+            "parse percent-encoded URLs, drop duplicates, extract file names, "
+            "and write one '<prefix>_merged.csv' per group in each folder."
         )
     )
     parser.add_argument(

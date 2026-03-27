@@ -5,6 +5,7 @@ import subprocess
 import logging
 import pandas as pd
 import json
+import sys
 import tempfile
 from datetime import datetime
 from src.utils.utils import load_config
@@ -163,24 +164,40 @@ def download_from_csv(csv_path: str, base_dir: str):
         "started_at": datetime.utcnow().isoformat() + "Z"
     })
 
-    aria2_cmd = [
-        "aria2c",
-        f"--dir={download_dir}",
-        f"--input-file={url_list}",
-        *ARIA2_COMMON_FLAGS,
-    ]
+    # Run aria2 per-URL with a short timeout to avoid getting stuck on slow servers.
+    ARIA2_PER_URL_TIMEOUT = 30  # seconds
+    PLAYWRIGHT_TIMEOUT_MS = ARIA2_PER_URL_TIMEOUT * 1000  # milliseconds for Playwright API
+    logger.info(f"▶ aria2c starting per-URL ({len(filtered)} URLs), timeout={ARIA2_PER_URL_TIMEOUT}s each")
 
-    logger.info(f"▶ aria2c starting ({len(filtered)} URLs)")
-    result = subprocess.run(
-        aria2_cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    aria2_errors = []
+    for u in filtered:
+        tname = _target_name_from_url(u) or u
+        aria2_cmd = [
+            "aria2c",
+            f"--dir={download_dir}",
+            # pass the URL directly so each run handles one resource and can be timed out
+            u,
+            *ARIA2_COMMON_FLAGS,
+        ]
 
-    if result.returncode != 0:
-        logger.error("aria2c exited with errors")
-        logger.error(result.stderr)
+        try:
+            result = subprocess.run(
+                aria2_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=ARIA2_PER_URL_TIMEOUT,
+            )
+            if result.returncode != 0:
+                logger.warning("aria2c failed for URL: %s (rc=%s)", u, result.returncode)
+                logger.debug(result.stderr)
+                aria2_errors.append(u)
+        except subprocess.TimeoutExpired:
+            logger.warning("aria2c timed out for URL: %s", u)
+            aria2_errors.append(u)
+        except Exception as e:
+            logger.warning("aria2c raised exception for URL: %s -> %s", u, e)
+            aria2_errors.append(u)
 
     # ── POST-VALIDATION ───────────────────────────────────────────────
     bad_files = []
@@ -201,17 +218,82 @@ def download_from_csv(csv_path: str, base_dir: str):
     remaining = []
     for u in filtered:
         tname = _target_name_from_url(u)
-        if not tname or not os.path.exists(os.path.join(download_dir, tname)):
-            remaining.append(u)
+        target_path = os.path.join(download_dir, tname) if tname else None
+        # If aria2 produced a valid file, consider it done
+        if tname and target_path and os.path.exists(target_path) and is_valid_pdf(target_path):
+            continue
+        # otherwise mark for fallback (includes those errored/timed out)
+        remaining.append(u)
 
     if remaining:
-        # Update state with remaining URLs so the next run can resume
-        _atomic_write(state_path, {
-            "csv": base_name,
-            "remaining": remaining,
-            "updated_at": datetime.utcnow().isoformat() + "Z"
-        })
-        logger.warning(f"Some URLs remain ({len(remaining)}). State updated for resume.")
+        # Try Playwright fallback for any remaining URLs (one-by-one)
+        logger.info(f"Attempting Playwright fallback for {len(remaining)} remaining URL(s)...")
+        try:
+            from src.post_process.download_with_playwrite import download_with_playwright
+        except Exception:
+            download_with_playwright = None
+
+        still_remaining = []
+        for u in remaining:
+            tname = _target_name_from_url(u)
+            if not tname:
+                logger.debug("No target filename derived; skipping playwright fallback: %s", u)
+                still_remaining.append(u)
+                continue
+
+            save_path = os.path.join(download_dir, tname)
+
+            # If file already present (joined race), skip
+            if os.path.exists(save_path) and is_valid_pdf(save_path):
+                logger.debug("File already present after aria2: %s", tname)
+                continue
+
+            ok = False
+            if download_with_playwright:
+                try:
+                    # Run the playwright downloader as a separate process with an enforced timeout
+                    script_path = os.path.join(os.path.dirname(__file__), "download_with_playwrite.py")
+                    cmd = [sys.executable, script_path, u, save_path, "--timeout", str(PLAYWRIGHT_TIMEOUT_MS)]
+                    logger.debug("Running Playwright subprocess: %s", cmd)
+                    try:
+                        proc = subprocess.run(
+                            cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=(PLAYWRIGHT_TIMEOUT_MS // 1000) + 5,
+                        )
+                        logger.debug("Playwright subprocess stdout: %s", proc.stdout)
+                        if proc.returncode == 0:
+                            ok = True
+                        else:
+                            logger.debug("Playwright subprocess failed (rc=%s): %s", proc.returncode, proc.stderr)
+                            ok = False
+                    except subprocess.TimeoutExpired:
+                        logger.warning("Playwright subprocess timed out for URL: %s", u)
+                        ok = False
+                except Exception as e:
+                    logger.debug("Playwright subprocess invocation error: %s", e)
+                    ok = False
+
+            if ok and is_valid_pdf(save_path):
+                logger.info("Playwright downloaded: %s", tname)
+            else:
+                logger.warning("Playwright fallback failed for URL: %s", u)
+                still_remaining.append(u)
+
+        if still_remaining:
+            # Update state with remaining URLs so the next run can resume
+            _atomic_write(state_path, {
+                "csv": base_name,
+                "remaining": still_remaining,
+                "updated_at": datetime.utcnow().isoformat() + "Z"
+            })
+            logger.warning(f"Some URLs remain ({len(still_remaining)}). State updated for resume.")
+        else:
+            # Completed successfully: remove state to avoid confusion next task
+            remove_state(state_path)
+            logger.info("✓ All URLs completed, state removed.")
     else:
         # Completed successfully: remove state to avoid confusion next task
         remove_state(state_path)

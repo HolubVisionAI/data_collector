@@ -1,6 +1,7 @@
 import os
 import yaml
 from pathlib import Path
+import logging
 
 # Get the directory of this script: src/utils
 current_file = Path(__file__).resolve()
@@ -10,6 +11,21 @@ project_root = current_file.parents[2]
 
 # Create a new file in the root
 output_file = project_root / "config.yaml"
+
+
+def init_log(name: str) -> logging.Logger:
+    log_dir = os.path.join(project_root, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, name + ".log")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        filename=log_file,
+        filemode='a'
+    )
+
+    return logging.getLogger(name)
 
 
 def load_config(config_path=output_file):

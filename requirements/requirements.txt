@@ -12,3 +12,12 @@ selenium>=4.0.0
 requests>=2.0
 webdriver-manager>=3.8
 selenium-stealth~=1.0
+pandas~=1.5.3
+numpy~=1.26.4
+# install browser: python -m playwright install
+playwright
+
+# server requirements (for src/download_server.py)
+fastapi>=0.95.0
+uvicorn[standard]>=0.20.0
+httpx>=0.24.0

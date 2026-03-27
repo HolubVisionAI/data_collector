@@ -36,12 +36,22 @@ downloading, data export and folder scanning.
 
 
 2. **Install dependencies**
-
+   python venv
    ```bash
-   
-   # or, with pip
+      # or, with pip
    pip install -r requirements.txt
    ```
+3. **aria2 and yt-dlp are required for downloading PDFs and videos, respectively.  
+   Make sure they are installed on your system:**
+   ```bash
+   sudo apt install aria2
+   ```
+
+4. **For video downloading, install yt-dlp:**
+
+   this chrome extension is needed for yt-dlp:
+
+   (https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
 
 ---
 
@@ -138,7 +148,7 @@ Run any task like so:
 * **Unix**: add a cron entry, e.g.
 
   ```cron
-  0 * * * * cd /path/to/data_collector && poetry run python -m src.sagepub_crawling --config config.yaml
+  0 * * * * cd /path/to/data_collector && python -m src.sagepub_crawling --config config.yaml
   ```
 
 ---

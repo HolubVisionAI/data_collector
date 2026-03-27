@@ -36,46 +36,55 @@ def rename_if_too_long(root: str, filename: str, max_len: int = 50) -> str:
     return new_name
 
 
-def process_category(category_dir: str, ext: str) -> tuple[int, int, int, int]:
+def process_category(category_dir: str, ext: str, only_count: bool = False) -> tuple[int, int, int, int]:
     """
     Walks a category directory, removes non-target files, duplicate PDFs, renames long filenames,
     and returns (file_count, total_size_bytes, removed_duplicates, removed_non_target).
+    
+    If only_count is True, skips all destructive operations (removing, renaming) and just counts files.
     """
     file_count = 0
     total_size = 0
     removed_dup = 0
     removed_non = 0
+    
+    if only_count:
+        logger.info(f"   📊 Counting only (no file modifications)")
+    
     for root, _, files in os.walk(category_dir):
         for filename in files:
             file_path = os.path.join(root, filename)
             _, file_ext = os.path.splitext(filename)
             file_ext = file_ext.lower()
+            
             if ext != 'video':
                 # target extensions: ext, .csv, .xlsx
-                if file_ext not in {f'.{ext}', '.csv', '.xlsx'}:
-                    try:
-                        os.remove(file_path)
-                        removed_non += 1
-                        logger.info(f"🗑️ Removed non-target: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed removing non-target {file_path}: {e}")
+                if file_ext not in {f'.{ext}', '.xlsx'}:
+                    if not only_count:
+                        try:
+                            os.remove(file_path)
+                            removed_non += 1
+                            logger.info(f"🗑️ Removed non-target: {file_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed removing non-target {file_path}: {e}")
                     continue
 
                 # remove duplicate PDFs
                 if file_ext == f'.{ext}' and DUP_PDF_PATTERN.search(filename):
-                    try:
-                        os.remove(file_path)
-                        removed_dup += 1
-                        logger.info(f"🗑️ Removed duplicate: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed removing duplicate {file_path}: {e}")
+                    if not only_count:
+                        try:
+                            os.remove(file_path)
+                            removed_dup += 1
+                            logger.info(f"🗑️ Removed duplicate: {file_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed removing duplicate {file_path}: {e}")
                     continue
 
-            # rename if too long and target file]
-            # if file_ext == f'.{ext}':
-            new_name = rename_if_too_long(root, filename)
-            filename = new_name
-            file_path = os.path.join(root, filename)
+            # rename if too long and target file (only if not only_count)
+            if not only_count:
+                new_name = rename_if_too_long(root, filename)
+                filename = new_name
+                file_path = os.path.join(root, filename)
 
             # accumulate
             try:
@@ -87,7 +96,7 @@ def process_category(category_dir: str, ext: str) -> tuple[int, int, int, int]:
     return file_count, total_size, removed_dup, removed_non
 
 
-def scan_folder_single(root_path: str, langs: list[str], types: list[str]) -> dict[str, dict]:
+def scan_folder_single(root_path: str, langs: list[str], types: list[str], only_count: bool = False) -> dict[str, dict]:
     results = {}
     if not os.path.isdir(root_path):
         logger.warning(f"Invalid scan path: {root_path}")
@@ -103,7 +112,7 @@ def scan_folder_single(root_path: str, langs: list[str], types: list[str]) -> di
                 continue
             key = f"{lang}/{file_type}"
             logger.info(f"Processing category: {key}")
-            count, size_bytes, dup_rm, non_rm = process_category(category_path, file_type)
+            count, size_bytes, dup_rm, non_rm = process_category(category_path, file_type, only_count)
             if count > 0:
                 results[key] = {
                     'count': count,
@@ -137,11 +146,20 @@ if __name__ == '__main__':
         input_dirs = cfg.get('INPUT_DIR', [])
         langs = cfg.get('LANG', [])
         types = cfg.get('FILE_TYPE', [])
+        only_count = cfg.get('ONLY_COUNT', False)
+        
+        # Handle both list and boolean values for ONLY_COUNT
+        if isinstance(only_count, list):
+            only_count = only_count[0] if only_count else False
+        only_count = bool(only_count)
+
+        if only_count:
+            logger.info("⚠️  ONLY_COUNT mode: Counting files only, no modifications will be made")
 
         all_summaries = {}
         for root in input_dirs:
             logger.info(f"🔍 Scanning: {root}")
-            summary = scan_folder_single(root, langs, types)
+            summary = scan_folder_single(root, langs, types, only_count)
             all_summaries[root] = summary
         format_and_save(all_summaries)
     except Exception as e:
