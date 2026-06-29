@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data Collector</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=9">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Data Collector</h1>
+      <p>{{ config_path }}</p>
+    </div>
+    <nav>
+      <a href="/docs">API Docs</a>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="status-grid" aria-label="System status">
+      <article class="status-card" id="googleStatusCard">
+        <div>
+          <span class="status-dot unknown" id="googleStatusDot"></span>
+          <h2>Google</h2>
+        </div>
+        <strong id="googleStatusText">Checking</strong>
+        <p id="googleStatusMeta">Connection status</p>
+      </article>
+      <article class="status-card" id="diskStatusCard">
+        <div>
+          <span class="status-dot unknown" id="diskStatusDot"></span>
+          <h2>Disk</h2>
+        </div>
+        <strong id="diskStatusText">Checking</strong>
+        <p id="diskStatusMeta">Remaining space</p>
+      </article>
+    </section>
+
+    <section class="panel tasks-panel" aria-label="Tasks">
+      <div class="section-title">
+        <h2>Tasks</h2>
+        <span id="taskCount">Active workflows</span>
+      </div>
+      <div class="task-grid">
+        {% for task_id, task in tasks.items() %}
+        {% if task.primary %}
+        <article class="task-card">
+          <div>
+            <h3>{{ task.name }}</h3>
+            <p>{{ task.description }}</p>
+          </div>
+          <footer>
+            <code>{{ task.config_section }}</code>
+            <div class="card-actions">
+              <button type="button" class="secondary"
+                data-config-task-id="{{ task_id }}"
+                data-config-section="{{ task.config_section }}"
+                data-task-name="{{ task.name }}">Config</button>
+              <button type="button" data-task-id="{{ task_id }}">Run</button>
+            </div>
+          </footer>
+        </article>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <details class="secondary-tasks">
+        <summary>Other tasks</summary>
+        <div class="task-grid compact">
+          {% for task_id, task in tasks.items() %}
+          {% if not task.primary %}
+          <article class="task-card compact-card">
+            <div>
+              <h3>{{ task.name }}</h3>
+              <p>{{ task.description }}</p>
+            </div>
+            <footer>
+              <code>{{ task.config_section }}</code>
+              <div class="card-actions">
+                <button type="button" class="secondary"
+                  data-config-task-id="{{ task_id }}"
+                  data-config-section="{{ task.config_section }}"
+                  data-task-name="{{ task.name }}">Config</button>
+                <button type="button" data-task-id="{{ task_id }}">Run</button>
+              </div>
+            </footer>
+          </article>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+
+    <section class="panel jobs-panel" aria-label="Jobs">
+      <div class="section-title">
+        <h2>Jobs</h2>
+        <span id="jobState">Idle</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>ETA</th>
+              <th>PID</th>
+              <th>Started</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="jobsTable">
+            <tr><td colspan="7" class="empty">No jobs yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-bar">
+        <button id="jobsPrevBtn" type="button" class="secondary">Prev</button>
+        <span id="jobsPageInfo">Page 1 of 1</span>
+        <button id="jobsNextBtn" type="button" class="secondary">Next</button>
+      </div>
+    </section>
+
+    <section class="panel log-panel" aria-label="Log">
+      <div class="section-title">
+        <h2>Log</h2>
+        <div class="log-controls">
+          <span id="activeJob">Logs disabled by default</span>
+          <label>
+            <input id="autoLogRefreshToggle" type="checkbox">
+            Auto refresh
+          </label>
+          <button id="loadLogBtn" type="button" class="secondary">Load latest log</button>
+        </div>
+      </div>
+      <pre id="logOutput">Logs are disabled by default. Click a job's Log button or Load latest log to fetch the latest log tail.</pre>
+    </section>
+  </main>
+
+  <div id="configModal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Task Config</h3>
+        <button id="modalCloseBtn" type="button" class="secondary icon-btn" aria-label="Close">x</button>
+      </div>
+      <div class="modal-hint" id="modalHint"></div>
+      <textarea id="modalEditor" spellcheck="false"></textarea>
+      <div class="actions">
+        <span id="modalState"></span>
+        <button id="modalCancelBtn" type="button" class="secondary">Cancel</button>
+        <button id="modalSaveBtn" type="button">Save</button>
+        <button id="modalSaveRunBtn" type="button">Save &amp; Run</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-tools" aria-label="Page navigation">
+    <button id="scrollTopBtn" type="button" title="Go to top">Top</button>
+    <button id="scrollBottomBtn" type="button" title="Go to bottom">Bottom</button>
+  </div>
+
+  <script src="{{ url_for('static', path='/app.js') }}?v=10"></script>
+</body>
+</html>

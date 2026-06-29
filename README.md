@@ -35,19 +35,24 @@ downloading, data export and folder scanning.
    cd data_collector
 
 
-2. **Install dependencies**
-   python venv
+2. **Create a virtual environment with uv (Python 3.10)**
    ```bash
-      # or, with pip
-   pip install -r requirements.txt
+   uv venv --python 3.10
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
-3. **aria2 and yt-dlp are required for downloading PDFs and videos, respectively.  
+
+3. **Install dependencies**
+   ```bash
+   uv pip install -r requirements.txt
+   ```
+
+4. **aria2 and yt-dlp are required for downloading PDFs and videos, respectively.  
    Make sure they are installed on your system:**
    ```bash
    sudo apt install aria2
    ```
 
-4. **For video downloading, install yt-dlp:**
+5. **For video downloading, install yt-dlp:**
 
    this chrome extension is needed for yt-dlp:
 
@@ -109,9 +114,62 @@ yt_dlp_download:
 * **Proxy rotation**, **search terms**, and other options are all configurable via the same file.
 * See `config.example.yaml` for full defaults.
 
+For PDF downloads, `aria2_download` also removes duplicate PDFs after a run when
+`DEDUPE_AFTER_DOWNLOAD` is enabled. The duplicate check uses the filename plus
+exact file size, then writes `duplicate_files_by_name_size.csv` in the download
+root with the kept and removed paths.
+
 ---
 
 ## ▶️ Usage
+
+### Web dashboard
+
+Start the FastAPI app and open the dashboard:
+
+```bash
+python -m uvicorn src.download_server:app --host 0.0.0.0 --port 8000
+```
+
+Then open:
+
+```text
+http://localhost:8000/
+```
+
+The dashboard can edit `config.yaml`, start configured jobs, and show job logs. The active workflows also show progress
+and estimated remaining time while they run. API docs are still available at `/docs`.
+
+### Start dashboard with the OS
+
+On Linux systems that use `systemd`, install the dashboard as a boot service:
+
+```bash
+chmod +x scripts/install_systemd_service.sh scripts/uninstall_systemd_service.sh
+./scripts/install_systemd_service.sh
+```
+
+Useful service commands:
+
+```bash
+sudo systemctl status data-collector
+sudo systemctl restart data-collector
+sudo journalctl -u data-collector -f
+```
+
+To remove the service:
+
+```bash
+./scripts/uninstall_systemd_service.sh
+```
+
+Optional settings can be passed while installing:
+
+```bash
+PORT=8080 SERVICE_NAME=data-collector ./scripts/install_systemd_service.sh
+```
+
+### Command line
 
 Replace `<module>` with one of:
 

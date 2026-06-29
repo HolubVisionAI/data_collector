@@ -4,3 +4,8 @@
 /config.yaml
 /.idea
 ./tmp
+__pycache__/
+*.log
+*.txt
+*.csv
+*.bak

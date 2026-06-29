@@ -100,6 +100,26 @@ springer_crawling:
   MAX_NAME_LEN:
     - 50
 
+tandf_crawling:
+  TARGET_NAME:
+    - "Journal of the International Society of Sports Nutrition"
+  START_URLS:
+    - "https://www.tandfonline.com/action/showAxaArticles?journalCode=rssn20"
+  OUTPUT_CSV:
+    - "./output/tandf/meta.csv"
+  PDF_DIR:
+    - "./output/tandf/pdfs"
+  DOWNLOAD_PDFS:
+    - true
+  HEADLESS:
+    - true
+  TIMEOUT_MS:
+    - 15000
+  SETTLE_MS:
+    - 1000
+  MAX_NAME_LEN:
+    - 120
+
 ####################################### export excel #######################################
 
 excel_creator:
@@ -131,6 +151,12 @@ aria2_download:
     - "./output/csvs"
   OUTPUT_DIR:
     - "./output/pdfs"
+  DEDUPE_AFTER_DOWNLOAD:
+    - true
+  DEDUPE_EXTENSIONS:
+    - ".pdf"
+  DEDUPE_REPORT_NAME:
+    - "duplicate_files_by_name_size.csv"
 
 ####################################### video downloader #######################################
 

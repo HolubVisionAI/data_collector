@@ -1,23 +1,28 @@
-springernature-api-client # springer api
-XlsxWriter
-pyyaml
-requests
-PyPDF2
-pdfplumber
-pandas ~=1.5.3
-yt-dlp # for downloading youtube
-# crowling by browser
-undetected-chromedriver>=3.1.5
-selenium>=4.0.0
-requests>=2.0
-webdriver-manager>=3.8
-selenium-stealth~=1.0
+pip>=24.0
+setuptools>=69.0
+wheel>=0.42
+
+# springernature-api-client # springer api
+# XlsxWriter
+pyyaml>=6.0
+# PyPDF2
+# pdfplumber
 pandas~=1.5.3
 numpy~=1.26.4
-# install browser: python -m playwright install
-playwright
+yt-dlp # for downloading youtube
+
+# browser capture/download helpers
+# undetected-chromedriver>=3.1.5
+# selenium>=4.0.0
+requests>=2.0
+# webdriver-manager>=3.8
+# selenium-stealth~=1.0
+playwright>=1.60.0
+# After installing requirements, install browser binaries:
+#   python -m playwright install chromium
 
 # server requirements (for src/download_server.py)
 fastapi>=0.95.0
 uvicorn[standard]>=0.20.0
 httpx>=0.24.0
+jinja2>=3.1.0

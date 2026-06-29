@@ -2,6 +2,14 @@ import os
 import glob
 import logging
 import argparse
+import sys
+import re
+from pathlib import Path
+
+# Ensure the repository root is on sys.path for direct execution of this script.
+project_root = Path(__file__).resolve().parents[2]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 import pandas as pd
 from urllib.parse import unquote
@@ -95,7 +103,17 @@ def process_group(prefix: str, file_list: list[str], output_dir: str):
 
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, f"{prefix}_merged.csv")
+    # If any input file for this group ends with '.web.csv', use '<prefix>_merge.web.csv'
+    # otherwise keep the default '<prefix>_merged.csv'. This preserves the '.web.csv'
+    # style for groups derived frodm web-exported files.
+    out_name = None
+    for p in file_list:
+        if p.lower().endswith('.web.csv'):
+            out_name = f"{prefix}_merged.web.csv"
+            break
+    if out_name is None:
+        out_name = f"{prefix}_merged.csv"
+    out_path = os.path.join(output_dir, out_name)
 
     # Write out only the two columns: URL, File Name
     combined[["URL", "File Name"]].to_csv(out_path, index=False)
@@ -107,9 +125,12 @@ def process_directory(dir_path: str):
     Process a single directory: find all files matching URL_FILE_PATTERN,
     group by prefix, and write merged CSV in the same directory.
     """
-    # Pattern: any filename containing URL_FILE_PATTERN (regardless of extension)
+    # Pattern: any filename containing URL_FILE_PATTERN (regardless of extension),
+    # plus raw web-link exports named "*.web.csv".
     pattern = os.path.join(dir_path, f"*{URL_FILE_PATTERN}*")
-    all_files = glob.glob(pattern)
+    pattern_files = glob.glob(pattern)
+    web_files = glob.glob(os.path.join(dir_path, "*.web.csv"))
+    all_files = list(dict.fromkeys(pattern_files + web_files))
 
     if not all_files:
         logger.debug(f"No files matching '*{URL_FILE_PATTERN}*' found in '{dir_path}'.")
@@ -122,10 +143,15 @@ def process_directory(dir_path: str):
     # Group by prefix (the part before URL_FILE_PATTERN)
     for full_path in all_files:
         base = os.path.basename(full_path)
-        if URL_FILE_PATTERN not in base:
+        if URL_FILE_PATTERN in base:
+            prefix = base.split(URL_FILE_PATTERN, 1)[0]
+        elif base.lower().endswith(".web.csv"):
+            prefix = base[:-len(".web.csv")]
+            prefix = re.sub(r"_\d+$", "", prefix)
+            prefix = re.sub(r"_filetype_?pdf$", "", prefix, flags=re.IGNORECASE)
+        else:
             logger.debug(f"   Skipping '{base}' (does not match pattern).")
             continue
-        prefix = base.split(URL_FILE_PATTERN, 1)[0]
         groups.setdefault(prefix, []).append(full_path)
 
     if not groups:
@@ -156,20 +182,26 @@ def main(input_dir: str, output_dir: str):
     if output_dir != input_dir:
         logger.info(f"Note: Output directory parameter ignored. CSV files will be written in each subfolder.")
     
-    processed_count = 0
-    
-    # Walk through all subdirectories
+    directories_to_process = []
     for root, dirs, files in os.walk(input_dir):
-        # Check if there are any matching files in this directory
-        matching_files = [f for f in files if URL_FILE_PATTERN in f]
+        matching_files = [
+            f for f in files
+            if URL_FILE_PATTERN in f or f.lower().endswith(".web.csv")
+        ]
         if matching_files:
-            process_directory(root)
-            processed_count += 1
-    
-    if processed_count == 0:
+            directories_to_process.append(root)
+
+    total_dirs = len(directories_to_process)
+    if total_dirs == 0:
         logger.warning(f"No directories with matching files found in '{input_dir}'.")
-    else:
-        logger.info(f"\n✅ Processed {processed_count} directory(ies).")
+        return
+
+    for idx, root in enumerate(directories_to_process, start=1):
+        percent = idx / total_dirs * 100
+        logger.info("Processing directory %s/%s (%.1f%%): %s", idx, total_dirs, percent, root)
+        process_directory(root)
+
+    logger.info(f"\n✅ Processed {total_dirs} directory(ies).")
 
 
 if __name__ == "__main__":
