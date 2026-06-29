@@ -489,6 +489,78 @@ th {
   display: none;
 }
 
+.config-form {
+  flex: 1;
+  min-height: 320px;
+  max-height: 62vh;
+  overflow: auto;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.32fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-field:first-child {
+  padding-top: 0;
+}
+
+.config-field:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.config-field label {
+  padding-top: 8px;
+  color: var(--code);
+  font: 12px/1.35 "Cascadia Code", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.config-input,
+.config-textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.config-input {
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.config-textarea {
+  min-height: 96px;
+  resize: vertical;
+  padding: 10px;
+  font: 13px/1.45 "Cascadia Code", Consolas, monospace;
+}
+
+.config-checkbox {
+  width: 20px;
+  height: 20px;
+  margin-top: 8px;
+  accent-color: var(--accent);
+}
+
+.raw-config-editor {
+  display: none;
+}
+
+.raw-config-editor.is-active {
+  display: block;
+}
+
 .modal #modalEditor {
   flex: 1;
   width: 100%;
@@ -551,5 +623,20 @@ th {
   .log-panel {
     grid-column: 1;
     grid-row: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .config-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .config-field label {
+    padding-top: 0;
+  }
+
+  .modal .actions {
+    flex-wrap: wrap;
   }
 }

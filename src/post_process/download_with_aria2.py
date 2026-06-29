@@ -10,7 +10,7 @@ import tempfile
 import contextlib
 import csv
 import importlib.util
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 try:
@@ -98,10 +98,13 @@ def _get_config_value(key: str, default):
     return value
 
 
+DOWNLOAD_BACKEND = str(_get_config_value("DOWNLOAD_BACKEND", "aria2")).strip().lower()
 ENABLE_PLAYWRIGHT_FALLBACK = _get_config_flag("ENABLE_PLAYWRIGHT_FALLBACK", False)
 PLAYWRIGHT_FALLBACK_TIMEOUT_MS = int(cfg.get("PLAYWRIGHT_FALLBACK_TIMEOUT_MS", [60 * 1000])[0])
 DEDUPE_AFTER_DOWNLOAD = _get_config_flag("DEDUPE_AFTER_DOWNLOAD", True)
 DEDUPE_REPORT_NAME = str(_get_config_value("DEDUPE_REPORT_NAME", "duplicate_files_by_name_size.csv"))
+IDM_EXE = str(_get_config_value("IDM_EXE", "/mnt/c/Program Files (x86)/Internet Download Manager/IDMan.exe"))
+IDM_QUEUE_ONLY = _get_config_flag("IDM_QUEUE_ONLY", False)
 DOWNLOAD_MANIFEST_NAME = ".download_manifest.json"
 MHTML_MIN_VALID_BYTES = int(_get_config_value("MHTML_MIN_VALID_BYTES", 250 * 1024))
 MHTML_CAPTURE_TIMEOUT_MS = int(_get_config_value("MHTML_CAPTURE_TIMEOUT_MS", 6000))
@@ -161,6 +164,10 @@ DEDUPE_EXTENSIONS = {
     ext.lower() if str(ext).startswith(".") else f".{str(ext).lower()}"
     for ext in _get_config_list("DEDUPE_EXTENSIONS", [".pdf", ".mhtml"])
 }
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -579,7 +586,22 @@ def _mark_download_manifest_success(download_dir: str, url: str, filename: str, 
     urls[url_key] = {
         "url": str(url),
         "filename": filename,
-        "updated_at": datetime.utcnow().isoformat() + "Z",
+        "updated_at": _utc_now_iso(),
+    }
+    _save_download_manifest(download_dir, manifest)
+    return manifest
+
+
+def _mark_download_manifest_queued(download_dir: str, url: str, filename: str, manifest: dict | None = None) -> dict:
+    manifest = manifest or _load_download_manifest(download_dir)
+    urls = manifest.setdefault("urls", {})
+    url_key = _canonical_url_for_dedupe(url)
+    urls[url_key] = {
+        "url": str(url),
+        "filename": filename,
+        "status": "queued",
+        "backend": "idm",
+        "updated_at": _utc_now_iso(),
     }
     _save_download_manifest(download_dir, manifest)
     return manifest
@@ -588,6 +610,101 @@ def _mark_download_manifest_success(download_dir: str, url: str, filename: str, 
 def _targets_for_urls(urls: list[str], target_by_url_key: dict[str, str]) -> dict[str, str]:
     url_keys = {_canonical_url_for_dedupe(u) for u in urls}
     return {k: v for k, v in target_by_url_key.items() if k in url_keys}
+
+
+def _to_windows_path(path: str) -> str:
+    if not path:
+        return path
+    if os.name == "nt":
+        return path
+    try:
+        result = subprocess.run(
+            ["wslpath", "-w", path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        logger.debug("wslpath failed for %s: %s", path, result.stderr.strip())
+    except Exception as e:
+        logger.debug("Could not convert path for IDM with wslpath: %s", e)
+    return path
+
+
+def _launch_idm_download(url: str, download_dir: str, filename: str) -> bool:
+    idm_exe = IDM_EXE.strip()
+    if not idm_exe:
+        logger.error("IDM_EXE is empty; cannot queue URL: %s", url)
+        return False
+    if idm_exe.startswith("/mnt/") and not os.path.exists(idm_exe):
+        logger.error("IDM executable not found: %s", idm_exe)
+        return False
+
+    command = [
+        idm_exe,
+        "/d",
+        str(url),
+        "/p",
+        _to_windows_path(download_dir),
+        "/f",
+        filename,
+        "/q",
+        "/n",
+        "/a",
+    ]
+
+    try:
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=20,
+        )
+    except Exception as e:
+        logger.warning("IDM launch failed for URL: %s -> %s", url, e)
+        return False
+
+    if result.returncode != 0:
+        logger.warning("IDM returned rc=%s for URL: %s", result.returncode, url)
+        if result.stderr.strip():
+            logger.debug("IDM stderr: %s", result.stderr.strip())
+        if result.stdout.strip():
+            logger.debug("IDM stdout: %s", result.stdout.strip())
+        return False
+
+    return True
+
+
+def _start_idm_queue() -> bool:
+    idm_exe = IDM_EXE.strip()
+    if not idm_exe:
+        logger.error("IDM_EXE is empty; cannot start IDM queue.")
+        return False
+
+    try:
+        result = subprocess.run(
+            [idm_exe, "/s"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=20,
+        )
+    except Exception as e:
+        logger.warning("IDM queue start failed: %s", e)
+        return False
+
+    if result.returncode != 0:
+        logger.warning("IDM queue start returned rc=%s", result.returncode)
+        if result.stderr.strip():
+            logger.debug("IDM /s stderr: %s", result.stderr.strip())
+        if result.stdout.strip():
+            logger.debug("IDM /s stdout: %s", result.stdout.strip())
+        return False
+
+    return True
 
 
 def _log_job_progress(
@@ -665,7 +782,7 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
         _atomic_write(state_path, {
             "csv": base_name,
             "remaining": urls,
-            "started_at": datetime.utcnow().isoformat() + "Z"
+            "started_at": _utc_now_iso()
         })
         logger.info(f"Created new state file with {len(urls)} URL(s).")
 
@@ -692,6 +809,7 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
         if manifest_name:
             manifest_path = os.path.join(download_dir, manifest_name)
             if os.path.exists(manifest_path) and _is_valid_download(manifest_path, mhtml_mode=use_mhtml_mode):
+                manifest = _mark_download_manifest_success(download_dir, u, manifest_name, manifest)
                 logger.debug("Skipping existing valid file for URL: %s -> %s", manifest_name, u)
                 continue
 
@@ -751,23 +869,64 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
         "csv": base_name,
         "remaining": [u for u, _ in filtered],
         "targets": target_by_url_key,
-        "started_at": datetime.utcnow().isoformat() + "Z"
+        "started_at": _utc_now_iso()
     })
 
-    # Run aria2 per-URL with a short timeout to avoid getting stuck on slow servers.
+    # Run the configured backend per URL. aria2 waits and validates files; IDM queues
+    # work in the Windows app, so this script records queued URLs for later validation.
     ARIA2_PER_URL_TIMEOUT = 30  # seconds
-    # If this is a web capture CSV, skip aria2 and use Playwright MHTML capture.
+    # If this is a web capture CSV, skip PDF backends and use Playwright MHTML capture.
     if use_mhtml_mode:
         PLAYWRIGHT_TIMEOUT_MS = MHTML_CAPTURE_TIMEOUT_MS
         logger.info(
-            "MHTML mode enabled: skipping aria2; sending %s URL(s) to Playwright (timeout=%sms, settle=%sms)",
+            "MHTML mode enabled: skipping PDF downloader; sending %s URL(s) to Playwright (timeout=%sms, settle=%sms)",
             len(filtered),
             PLAYWRIGHT_TIMEOUT_MS,
             MHTML_CAPTURE_SETTLE_MS,
         )
         # Remaining URLs are the whole filtered list; Playwright will handle them.
         remaining = [u for u, _ in filtered]
+    elif DOWNLOAD_BACKEND == "idm":
+        PLAYWRIGHT_TIMEOUT_MS = ARIA2_PER_URL_TIMEOUT * 1000
+        logger.info("▶ IDM queueing %s URL(s) via: %s", len(filtered), IDM_EXE)
+
+        idm_errors = []
+        total_urls = len(filtered)
+        for idx, (u, tname) in enumerate(filtered, start=1):
+            percent = idx / total_urls * 100
+            _log_job_progress(
+                file_index,
+                total_files,
+                idx,
+                total_urls,
+                f"Queue IDM file {base_name}: {tname}",
+            )
+            logger.info(
+                "▶ [%s/%s] IDM queueing: %s (%.1f%%)",
+                idx,
+                total_urls,
+                tname,
+                percent,
+            )
+            if _launch_idm_download(u, download_dir, tname):
+                manifest = _mark_download_manifest_queued(download_dir, u, tname, manifest)
+                continue
+            idm_errors.append(u)
+
+        remaining = idm_errors
+        if not remaining:
+            if IDM_QUEUE_ONLY:
+                logger.info("IDM_QUEUE_ONLY=true; downloads were added to IDM but the queue was not started.")
+            elif _start_idm_queue():
+                logger.info("IDM queue started.")
+            else:
+                logger.warning("All URLs were added to IDM, but starting the IDM queue failed.")
+            remove_state(state_path)
+            _log_job_progress(file_index, total_files, 1, 1, f"Sent {base_name} to IDM")
+            logger.info("✓ All URLs sent to IDM. Run the job again later to validate completed files.")
     else:
+        if DOWNLOAD_BACKEND != "aria2":
+            logger.warning("Unknown DOWNLOAD_BACKEND=%r; falling back to aria2.", DOWNLOAD_BACKEND)
         PLAYWRIGHT_TIMEOUT_MS = ARIA2_PER_URL_TIMEOUT * 1000  # milliseconds for Playwright API
         logger.info(f"▶ aria2c starting per-URL ({len(filtered)} URLs), timeout={ARIA2_PER_URL_TIMEOUT}s each")
 
@@ -852,7 +1011,7 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
             "csv": base_name,
             "remaining": remaining,
             "targets": _targets_for_urls(remaining, target_by_url_key),
-            "updated_at": datetime.utcnow().isoformat() + "Z",
+            "updated_at": _utc_now_iso(),
         })
         return
 
@@ -870,7 +1029,7 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
                 "csv": base_name,
                 "remaining": remaining,
                 "targets": _targets_for_urls(remaining, target_by_url_key),
-                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "updated_at": _utc_now_iso(),
             })
             return
 
@@ -969,7 +1128,7 @@ def download_from_csv(csv_path: str, base_dir: str, file_index: int | None = Non
                 "csv": base_name,
                 "remaining": still_remaining,
                 "targets": _targets_for_urls(still_remaining, target_by_url_key),
-                "updated_at": datetime.utcnow().isoformat() + "Z"
+                "updated_at": _utc_now_iso()
             })
             logger.warning(f"Some URLs remain ({len(still_remaining)}). State updated for resume.")
         else:

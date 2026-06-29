@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Data Collector</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=9">
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=10">
 </head>
 <body>
   <header class="topbar">
@@ -145,7 +145,8 @@
         <button id="modalCloseBtn" type="button" class="secondary icon-btn" aria-label="Close">x</button>
       </div>
       <div class="modal-hint" id="modalHint"></div>
-      <textarea id="modalEditor" spellcheck="false"></textarea>
+      <form id="modalForm" class="config-form"></form>
+      <textarea id="modalEditor" class="raw-config-editor" spellcheck="false"></textarea>
       <div class="actions">
         <span id="modalState"></span>
         <button id="modalCancelBtn" type="button" class="secondary">Cancel</button>
@@ -160,6 +161,6 @@
     <button id="scrollBottomBtn" type="button" title="Go to bottom">Bottom</button>
   </div>
 
-  <script src="{{ url_for('static', path='/app.js') }}?v=10"></script>
+  <script src="{{ url_for('static', path='/app.js') }}?v=12"></script>
 </body>
 </html>

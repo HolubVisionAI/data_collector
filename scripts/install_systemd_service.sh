@@ -6,7 +6,7 @@ ROOT="${ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SERVICE_USER="${SERVICE_USER:-$(id -un)}"
 SERVICE_GROUP="${SERVICE_GROUP:-$(id -gn)}"
 HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-8001}"
+PORT="${PORT:-8000}"
 PYTHON="${PYTHON:-$ROOT/.venv/bin/python}"
 UNIT_PATH="/etc/systemd/system/${SERVICE_NAME}.service"
 

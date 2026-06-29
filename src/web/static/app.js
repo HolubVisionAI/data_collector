@@ -8,6 +8,7 @@ const logOutput = $("#logOutput");
 const configModal = $("#configModal");
 const modalTitle = $("#modalTitle");
 const modalHint = $("#modalHint");
+const modalForm = $("#modalForm");
 const modalEditor = $("#modalEditor");
 const modalState = $("#modalState");
 const googleStatusDot = $("#googleStatusDot");
@@ -25,6 +26,7 @@ let selectedJobId = null;
 let currentConfigText = "";
 let activeConfigTaskId = null;
 let activeConfigSection = null;
+let activeConfigMode = "form";
 let allJobs = [];
 let jobsPage = 1;
 let logLoaded = false;
@@ -288,40 +290,234 @@ function replaceSection(configText, sectionName, sectionText) {
   return [...before, normalized, ...after].join("\n");
 }
 
+function stripInlineComment(value) {
+  let quote = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if ((char === '"' || char === "'") && value[index - 1] !== "\\") {
+      quote = quote === char ? null : quote || char;
+    }
+    if (char === "#" && !quote && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index).trimEnd();
+    }
+  }
+  return value.trim();
+}
+
+function parseScalar(value) {
+  const trimmed = stripInlineComment(value);
+  if (!trimmed) return "";
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1);
+  }
+  if (/^(true|false)$/i.test(trimmed)) return trimmed.toLowerCase() === "true";
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed);
+  return trimmed;
+}
+
+function inferControlType(values) {
+  if (values.length === 1 && typeof values[0] === "boolean") return "boolean";
+  if (values.length === 1 && typeof values[0] === "number") return "number";
+  if (values.length <= 1) return "text";
+  if (values.every((value) => typeof value === "number")) return "number-list";
+  return "list";
+}
+
+function parseConfigSection(sectionText, sectionName) {
+  const lines = sectionText.split(/\r?\n/);
+  if (lines[0]?.trim() !== `${sectionName}:`) return null;
+
+  const fields = [];
+  let currentField = null;
+
+  for (const line of lines.slice(1)) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+
+    const keyMatch = line.match(/^ {2}([A-Za-z0-9_]+):\s*(.*?)\s*$/);
+    if (keyMatch) {
+      currentField = {
+        key: keyMatch[1],
+        values: [],
+      };
+      const inlineValue = stripInlineComment(keyMatch[2]);
+      if (inlineValue) currentField.values.push(parseScalar(inlineValue));
+      fields.push(currentField);
+      continue;
+    }
+
+    const itemMatch = line.match(/^ {2,4}-\s*(.*?)\s*$/);
+    if (itemMatch && currentField) {
+      currentField.values.push(parseScalar(itemMatch[1]));
+      continue;
+    }
+
+    return null;
+  }
+
+  return fields.map((field) => ({
+    ...field,
+    controlType: inferControlType(field.values),
+  }));
+}
+
+function formatYamlScalar(value) {
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+
+  const text = String(value ?? "");
+  if (!text) return '""';
+  if (/^(true|false|null|~)$/i.test(text) || /^-?\d+(\.\d+)?$/.test(text) || /[:#\[\]{},&*!|>'"%@`]/.test(text) || /^\s|\s$/.test(text)) {
+    return JSON.stringify(text);
+  }
+  return text;
+}
+
+function configValuesFromControl(control, controlType) {
+  if (controlType === "boolean") return [control.checked];
+  if (controlType === "number") return [Number(control.value || 0)];
+
+  if (controlType === "number-list") {
+    return control.value
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(Number);
+  }
+
+  if (controlType === "list") {
+    return control.value
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+
+  return [control.value];
+}
+
+function sectionTextFromForm(sectionName) {
+  if (!modalForm) return "";
+  const lines = [`${sectionName}:`];
+  $$("[data-config-key]").forEach((control) => {
+    const values = configValuesFromControl(control, control.dataset.configType);
+    lines.push(`  ${control.dataset.configKey}:`);
+    if (!values.length) {
+      lines.push("    - \"\"");
+      return;
+    }
+    values.forEach((value) => {
+      lines.push(`    - ${formatYamlScalar(value)}`);
+    });
+  });
+  return lines.join("\n");
+}
+
+function renderConfigForm(fields) {
+  if (!modalForm) return;
+  modalForm.innerHTML = fields.map((field) => {
+    const id = `configField_${field.key}`;
+    const value = field.values[0] ?? "";
+    if (field.controlType === "boolean") {
+      return `
+        <div class="config-field">
+          <label for="${escapeHtml(id)}">${escapeHtml(field.key)}</label>
+          <input id="${escapeHtml(id)}" class="config-checkbox" type="checkbox" data-config-key="${escapeHtml(field.key)}" data-config-type="${field.controlType}" ${value ? "checked" : ""}>
+        </div>`;
+    }
+    if (field.controlType === "number") {
+      return `
+        <div class="config-field">
+          <label for="${escapeHtml(id)}">${escapeHtml(field.key)}</label>
+          <input id="${escapeHtml(id)}" class="config-input" type="number" step="any" data-config-key="${escapeHtml(field.key)}" data-config-type="${field.controlType}" value="${escapeHtml(value)}">
+        </div>`;
+    }
+    if (field.controlType === "list" || field.controlType === "number-list") {
+      return `
+        <div class="config-field">
+          <label for="${escapeHtml(id)}">${escapeHtml(field.key)}</label>
+          <textarea id="${escapeHtml(id)}" class="config-textarea" data-config-key="${escapeHtml(field.key)}" data-config-type="${field.controlType}" spellcheck="false">${escapeHtml(field.values.join("\n"))}</textarea>
+        </div>`;
+    }
+    return `
+      <div class="config-field">
+        <label for="${escapeHtml(id)}">${escapeHtml(field.key)}</label>
+        <input id="${escapeHtml(id)}" class="config-input" type="text" data-config-key="${escapeHtml(field.key)}" data-config-type="${field.controlType}" value="${escapeHtml(value)}">
+      </div>`;
+  }).join("");
+}
+
+function showRawConfigEditor(sectionText) {
+  activeConfigMode = "raw";
+  if (modalForm) modalForm.hidden = true;
+  if (modalEditor) {
+    modalEditor.hidden = false;
+    modalEditor.classList.add("is-active");
+    modalEditor.value = sectionText;
+    modalEditor.focus();
+  }
+}
+
+function showConfigForm(fields) {
+  activeConfigMode = "form";
+  if (modalEditor) {
+    modalEditor.hidden = true;
+    modalEditor.classList.remove("is-active");
+  }
+  if (modalForm) {
+    modalForm.hidden = false;
+    renderConfigForm(fields);
+    const firstControl = modalForm.querySelector("input, textarea");
+    if (firstControl) firstControl.focus();
+  }
+}
+
 function closeConfigModal() {
   if (!configModal) return;
   configModal.hidden = true;
   activeConfigTaskId = null;
   activeConfigSection = null;
+  activeConfigMode = "form";
 }
 
 async function openConfigModal(button) {
-  if (!configModal || !modalEditor || !modalTitle || !modalHint || !modalState) return;
+  if (!configModal || !modalForm || !modalEditor || !modalTitle || !modalHint || !modalState) return;
 
   activeConfigTaskId = button.dataset.configTaskId;
   activeConfigSection = button.dataset.configSection;
   modalTitle.textContent = `${button.dataset.taskName || "Task"} Config`;
   modalHint.textContent = activeConfigSection;
   modalState.textContent = "Loading";
+  modalForm.innerHTML = "";
+  modalForm.hidden = false;
+  modalEditor.hidden = true;
+  modalEditor.classList.remove("is-active");
   configModal.hidden = false;
 
   try {
     const configText = await loadConfigText();
-    modalEditor.value = extractSection(configText, activeConfigSection);
-    modalState.textContent = "Loaded";
-    modalEditor.focus();
+    const sectionText = extractSection(configText, activeConfigSection);
+    const fields = parseConfigSection(sectionText, activeConfigSection);
+    if (fields) {
+      showConfigForm(fields);
+      modalState.textContent = "Loaded controls";
+    } else {
+      showRawConfigEditor(sectionText);
+      modalState.textContent = "Loaded YAML";
+    }
   } catch (error) {
     modalState.textContent = error.message;
   }
 }
 
 async function saveModalConfig() {
-  if (!modalEditor || !modalState || !activeConfigSection) return false;
+  if (!modalEditor || !modalForm || !modalState || !activeConfigSection) return false;
 
   modalState.textContent = "Saving";
   try {
     const configText = currentConfigText || await loadConfigText();
-    const nextConfig = replaceSection(configText, activeConfigSection, modalEditor.value);
+    const sectionText = activeConfigMode === "form"
+      ? sectionTextFromForm(activeConfigSection)
+      : modalEditor.value;
+    const nextConfig = replaceSection(configText, activeConfigSection, sectionText);
     await api("/api/config", {
       method: "PUT",
       body: JSON.stringify({content: nextConfig}),
@@ -368,6 +564,9 @@ bindOptional("#scrollBottomBtn", "click", () => window.scrollTo({top: document.b
 
 bindOptional("#modalCloseBtn", "click", closeConfigModal);
 bindOptional("#modalCancelBtn", "click", closeConfigModal);
+if (modalForm) {
+  modalForm.addEventListener("submit", (event) => event.preventDefault());
+}
 bindOptional("#modalSaveBtn", "click", async () => {
   const saved = await saveModalConfig();
   if (saved) closeConfigModal();

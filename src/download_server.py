@@ -71,7 +71,7 @@ TASKS = {
     "aria2_download": {
         "name": "PDF Download",
         "module": "src.post_process.download_with_aria2",
-        "description": "Download PDFs from *_merged.csv files with aria2 and optional Playwright fallback.",
+        "description": "Download PDFs from *_merged.csv files with aria2 or IDM, plus optional Playwright fallback.",
         "config_section": "aria2_download",
         "primary": True,
     },
@@ -761,4 +761,4 @@ def download_file(req: DownloadRequest, background_tasks: BackgroundTasks):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.download_server:app", host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run("src.download_server:app", host="0.0.0.0", port=8000, reload=False)

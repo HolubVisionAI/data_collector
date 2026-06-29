@@ -64,6 +64,30 @@ springer_crawling:
   MAX_NAME_LEN:
     - 50
 
+tandf_crawling:
+  TARGET_NAME:
+    - "Journal of the International Society of Sports Nutrition"
+  # Known targets:
+  # - "Studies in conservation" (ysic20)
+  # - "Journal of the institute of conservation" (rcon20)
+  # - "Journal of the International Society of Sports Nutrition" (rssn20)
+  START_URLS:
+    - "https://www.tandfonline.com/action/showAxaArticles?journalCode=rssn20"
+  OUTPUT_CSV:
+    - "./output/tandf/meta.csv"
+  PDF_DIR:
+    - "./output/tandf/pdfs"
+  DOWNLOAD_PDFS:
+    - true
+  HEADLESS:
+    - true
+  TIMEOUT_MS:
+    - 15000
+  SETTLE_MS:
+    - 1000
+  MAX_NAME_LEN:
+    - 120
+
 ####################################### export excel #######################################
 
 excel_creator:
@@ -95,6 +119,23 @@ aria2_download:
     - "./output/csvs"
   OUTPUT_DIR:
     - "./output/pdfs"
+  DOWNLOAD_BACKEND:
+    - "aria2"  # aria2 or idm
+  IDM_EXE:
+    - "/mnt/c/Program Files (x86)/Internet Download Manager/IDMan.exe"
+  IDM_QUEUE_ONLY:
+    - false
+  DEDUPE_AFTER_DOWNLOAD:
+    - true
+  DEDUPE_EXTENSIONS:
+    - ".pdf"
+    - ".mhtml"
+  DEDUPE_REPORT_NAME:
+    - "duplicate_files_by_name_size.csv"
+  MHTML_CAPTURE_TIMEOUT_MS:
+    - 6000
+  MHTML_CAPTURE_SETTLE_MS:
+    - 300
 
 ####################################### video downloader #######################################
 
@@ -123,3 +164,10 @@ scan_folder:
   FILE_TYPE:
     - pdf
     - video
+    - mhtml
+  ONLY_COUNT:
+    - false
+  REMOVE_NON_TARGET:
+    - true
+  REMOVE_DUPLICATES:
+    - false
